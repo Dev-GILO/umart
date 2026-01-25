@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { auth } from '@/lib/firebase'
 import { CustomerInfo } from './components/CustomerInfo'
 import { ProductsSection } from './components/ProductsSection'
 import { PricingSummary } from './components/PricingSummary'
@@ -42,7 +43,16 @@ export function CreatorInvoiceClient() {
       setLoading(true)
       setError('')
 
-      const token = localStorage.getItem('authToken')
+      // Get current user and fresh token
+      const user = auth.currentUser
+      
+      if (!user) {
+        setError('Please log in to create an invoice')
+        router.push('/auth/login')
+        return
+      }
+
+      const token = await user.getIdToken(true) // Force refresh
 
       const response = await fetch('/api/payment/create', {
         method: 'POST',
@@ -72,8 +82,10 @@ export function CreatorInvoiceClient() {
         return
       }
 
-      // Redirect to Paystack payment link
-      window.location.href = result.data.paystackLink
+      // Redirect to success page
+      router.push(
+        `/creator/invoice/success?refId=${result.data.refId}&grandPrice=${result.data.grandPrice}`
+      )
     } catch (err: any) {
       setError(err.message || 'Failed to create invoice')
     } finally {

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import axios from 'axios' // Import axios here
 
 interface InvoiceItem {
   productId: string
@@ -128,9 +127,6 @@ export async function POST(req: NextRequest) {
     })
 
     await batch.commit()
-
-    // Declare paystackLink variable
-    const paystackLink = 'https://paystack.com/link'; // Example URL, replace with actual logic
 
     return NextResponse.json(
       {
