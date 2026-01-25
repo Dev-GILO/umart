@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase-admin'
-import axios from 'axios'
+import { Timestamp } from 'firebase-admin/firestore'
+import axios from 'axios' // Import axios here
 
 interface InvoiceItem {
   productId: string
@@ -61,38 +62,6 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now()
     const refId = `umart-ref-${timestamp}`
 
-    // Create payment intent with Paystack
-    const paystackResponse = await axios.post(
-      'https://api.paystack.co/transaction/initialize',
-      {
-        email: buyerEmail,
-        amount: Math.round(grandPrice * 100), // Paystack uses cents
-        reference: refId,
-        metadata: {
-          sellerId,
-          buyerId,
-          items,
-          shippingFee,
-          platformFee,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-
-    if (!paystackResponse.data.status) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to create payment link' },
-        { status: 500 }
-      )
-    }
-
-    const paystackLink = paystackResponse.data.data.authorization_url
-
     // Create reference document in Firestore
     const referenceData = {
       refId,
@@ -107,12 +76,10 @@ export async function POST(req: NextRequest) {
       platformFee,
       grandPrice,
       status: 'pending',
-      paystackLink,
-      paystackReference: paystackResponse.data.data.reference,
       valueReceived: false,
       withdrawn: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     }
 
     await adminDb.collection('references').doc(refId).set(referenceData)
@@ -124,7 +91,7 @@ export async function POST(req: NextRequest) {
     const sellerTransactionRef = adminDb
       .collection('users')
       .doc(sellerId)
-      .collection('transactions')
+      .collection('transactions-sell')
       .doc(refId)
 
     batch.set(sellerTransactionRef, {
@@ -145,7 +112,7 @@ export async function POST(req: NextRequest) {
     const buyerTransactionRef = adminDb
       .collection('users')
       .doc(buyerId)
-      .collection('transactions')
+      .collection('transactions-buy')
       .doc(refId)
 
     batch.set(buyerTransactionRef, {
@@ -162,12 +129,14 @@ export async function POST(req: NextRequest) {
 
     await batch.commit()
 
+    // Declare paystackLink variable
+    const paystackLink = 'https://paystack.com/link'; // Example URL, replace with actual logic
+
     return NextResponse.json(
       {
         success: true,
         data: {
           refId,
-          paystackLink,
           grandPrice,
         },
       },

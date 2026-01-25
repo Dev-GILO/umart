@@ -24,32 +24,32 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url)
-    const refId = searchParams.get('refId')
+    const refId = searchParams.get('id')
 
     if (!refId) {
       return NextResponse.json(
-        { success: false, error: 'Missing reference ID' },
+        { success: false, error: 'Missing transaction ID' },
         { status: 400 }
       )
     }
 
-    // Fetch reference document from Firestore
+    // Fetch transaction details from references collection
     const refDoc = await adminDb.collection('references').doc(refId).get()
 
     if (!refDoc.exists) {
       return NextResponse.json(
-        { success: false, error: 'Reference not found' },
+        { success: false, error: 'Transaction not found' },
         { status: 404 }
       )
     }
 
     const refData = refDoc.data()
 
-    // Verify user has access to this reference
+    // Verify user has access to this transaction
     const userId = decodedToken.uid
     if (refData?.buyerId !== userId && refData?.sellerId !== userId) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized access to this reference' },
+        { success: false, error: 'Unauthorized access to this transaction' },
         { status: 403 }
       )
     }
@@ -59,19 +59,31 @@ export async function GET(req: NextRequest) {
         success: true,
         data: {
           refId: refData?.refId,
-          status: refData?.status, // 'pending', 'success', or 'failed'
+          sellerId: refData?.sellerId,
+          buyerId: refData?.buyerId,
+          buyerName: refData?.buyerName,
+          buyerEmail: refData?.buyerEmail,
+          buyerPhone: refData?.buyerPhone,
+          items: refData?.items || [],
+          itemsTotal: refData?.itemsTotal || 0,
+          shippingFee: refData?.shippingFee || 0,
+          platformFee: refData?.platformFee || 0,
+          grandPrice: refData?.grandPrice || 0,
+          status: refData?.status,
           valueReceived: refData?.valueReceived,
           withdrawn: refData?.withdrawn,
+          createdAt: refData?.createdAt,
+          updatedAt: refData?.updatedAt,
         },
       },
       { status: 200 }
     )
   } catch (error: any) {
-    console.error('Error verifying payment:', error)
+    console.error('Error fetching transaction:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to verify payment',
+        error: error.message || 'Failed to fetch transaction',
       },
       { status: 500 }
     )
