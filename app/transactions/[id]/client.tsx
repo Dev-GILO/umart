@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Loader2, ChevronLeft, Check } from 'lucide-react'
 import { BuyerNav } from '@/components/nav/buyer-nav'
-import { PaystackPop } from 'paystack-react' // Declare PaystackPop variable
 
 interface TransactionDetail {
   refId: string
@@ -154,7 +153,7 @@ export function TransactionDetailClient() {
       if (typeof window.PaystackPop !== 'undefined') {
         // @ts-ignore
         const handler = window.PaystackPop.setup({
-          key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
+          key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
           email: transaction.buyerEmail,
           amount: Math.round(transaction.grandPrice * 100), // Paystack uses cents
           ref: transaction.refId,
