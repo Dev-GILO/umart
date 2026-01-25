@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import SuccessClient from './client'
+import { Suspense } from 'react'
 
 export const metadata: Metadata = {
   title: 'Product Created - uHomes Mart',
@@ -7,5 +8,15 @@ export const metadata: Metadata = {
 }
 
 export default function SuccessPage() {
-  return <SuccessClient />
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <SuccessClient />
+    </Suspense>
+  )
 }
