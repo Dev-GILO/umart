@@ -1,0 +1,50 @@
+'use client'
+
+export const NIGERIAN_STATES = [
+  'Abia',
+  'Adamawa',
+  'Akwa Ibom',
+  'Anambra',
+  'Bauchi',
+  'Bayelsa',
+  'Benue',
+  'Borno',
+  'Cross River',
+  'Delta',
+  'Ebonyi',
+  'Edo',
+  'Ekiti',
+  'Enugu',
+  'Gombe',
+  'Imo',
+  'Jigawa',
+  'Kaduna',
+  'Kano',
+  'Katsina',
+  'Kebbi',
+  'Kogi',
+  'Kwara',
+  'Lagos',
+  'Nasarawa',
+  'Niger',
+  'Ogun',
+  'Ondo',
+  'Osun',
+  'Oyo',
+  'Plateau',
+  'Rivers',
+  'Sokoto',
+  'Taraba',
+  'Yobe',
+  'Zamfara',
+  'Federal Capital Territory',
+]
+
+export function useNigerianStates() {
+  return {
+    states: NIGERIAN_STATES,
+    getState: (index: number) => NIGERIAN_STATES[index],
+    getIndex: (state: string) => NIGERIAN_STATES.indexOf(state),
+    isValidState: (state: string) => NIGERIAN_STATES.includes(state),
+  }
+}
