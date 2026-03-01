@@ -15,7 +15,13 @@ import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 export default function LoginClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/'
+
+  // Decode in case the redirect param was URL-encoded
+  // e.g. %2Fproduct%2Fxyz%3Fcontact%3Dtrue → /product/xyz?contact=true
+  const redirect = (() => {
+    const raw = searchParams.get('redirect') || '/'
+    try { return decodeURIComponent(raw) } catch { return raw }
+  })()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,22 +36,14 @@ export default function LoginClient() {
     setLoading(true)
 
     try {
-      // Sign in with Firebase
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
-
-      // Get ID token
       const idToken = await user.getIdToken()
 
-      // Call API route to set cookies with just the token
       const response = await fetch('/api/users/cookies', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token: idToken,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: idToken }),
       })
 
       if (!response.ok) {
@@ -54,11 +52,11 @@ export default function LoginClient() {
 
       const result = loginResponse(null, redirect)
       setSuccess(result.message)
-      
-      // Ensure redirect path starts with /
+
+      // Ensure redirect path starts with / and preserve any query params (e.g. ?contact=true)
       const redirectPath = redirect.startsWith('/') ? redirect : `/${redirect}`
-      
-      // Redirect after brief delay to show success message
+
+      // Full page navigation so onAuthStateChanged fires on the destination page
       setTimeout(() => {
         window.location.href = redirectPath
       }, 1000)
@@ -91,7 +89,7 @@ export default function LoginClient() {
                 <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
               </div>
             )}
-            
+
             {error && (
               <div className="flex gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -100,9 +98,7 @@ export default function LoginClient() {
             )}
 
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
-              </label>
+              <label htmlFor="email" className="text-sm font-medium">Email</label>
               <Input
                 id="email"
                 type="email"
@@ -115,9 +111,7 @@ export default function LoginClient() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
+              <label htmlFor="password" className="text-sm font-medium">Password</label>
               <Input
                 id="password"
                 type="password"
@@ -129,11 +123,7 @@ export default function LoginClient() {
               />
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

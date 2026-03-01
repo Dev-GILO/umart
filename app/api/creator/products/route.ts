@@ -1,7 +1,7 @@
-// app/api/creator/product/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { randomUUID } from 'crypto'
 
 // POST: Create a new product
 export async function POST(req: NextRequest) {
@@ -54,8 +54,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Generate product ID
-    const productId = `prod_${Date.now()}`
+    // Generate collision-safe product ID using UUID
+    const productId = `prod_${randomUUID()}`
 
     // Generate product title from brand and model
     const title = model ? `${brand} ${model}` : brand
@@ -115,6 +115,28 @@ export async function POST(req: NextRequest) {
     batch.update(userRef, {
       productsUploaded: FieldValue.increment(1),
     })
+
+    // 5. Update admin analytics (daily, monthly, yearly) — Nigerian timezone (WAT = UTC+1)
+    const now = new Date()
+    const nigerianTime = new Date(now.getTime() + 60 * 60 * 1000)
+
+    const year = nigerianTime.getUTCFullYear().toString()
+    const month = `${nigerianTime.getUTCFullYear()}-${String(nigerianTime.getUTCMonth() + 1).padStart(2, '0')}`
+    const day = `${nigerianTime.getUTCFullYear()}-${String(nigerianTime.getUTCMonth() + 1).padStart(2, '0')}-${String(nigerianTime.getUTCDate()).padStart(2, '0')}`
+
+    const analyticsUpdateData = {
+      productsCreated: FieldValue.increment(1),
+      lastUpdated: FieldValue.serverTimestamp(),
+    }
+
+    const dailyRef = adminDb.collection('admin').doc('analytics').collection('daily').doc(day)
+    batch.set(dailyRef, analyticsUpdateData, { merge: true })
+
+    const monthlyRef = adminDb.collection('admin').doc('analytics').collection('monthly').doc(month)
+    batch.set(monthlyRef, analyticsUpdateData, { merge: true })
+
+    const yearlyRef = adminDb.collection('admin').doc('analytics').collection('yearly').doc(year)
+    batch.set(yearlyRef, analyticsUpdateData, { merge: true })
 
     // Commit the batch
     await batch.commit()

@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import HomePage from './home-client'
 
 export const metadata: Metadata = {
-  title: 'Home - uHomes Mart',
-  description: 'Welcome to uHomes Mart - Your second-hand marketplace',
+  title: 'Home - U Mart',
+  description: 'Welcome to U Mart - Your favourite marketplace',
 }
 
 export default function Home() {

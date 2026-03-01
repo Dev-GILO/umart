@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { BuyerNav } from '@/components/nav/buyer-nav'
 import { SearchBar, SearchFilters } from '@/components/home/SearchBar'
 import { ProductCards } from '@/components/home/ProductCards'
+import { ProductList } from '@/components/home/ProductList'
 
 interface Product {
   id: string
@@ -24,7 +25,6 @@ export default function HomePage() {
   const handleSearch = async (filters: SearchFilters) => {
     setIsLoading(true)
     setHasSearched(true)
-
     try {
       const params = new URLSearchParams()
       if (filters.query) params.append('q', filters.query)
@@ -35,10 +35,7 @@ export default function HomePage() {
 
       const response = await fetch(`/api/products?${params}`)
       const result = await response.json()
-
-      if (result.success) {
-        setProducts(result.data)
-      }
+      if (result.success) setProducts(result.data)
     } catch (error) {
       console.error('Search error:', error)
     } finally {
@@ -47,31 +44,37 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
       <BuyerNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
-        {/* Header */}
-        <div className="space-y-6 sm:space-y-8 mb-8 sm:mb-12">
-          <div className="text-center space-y-2 sm:space-y-4">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground">
-              U Mart
+
+      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+
+        {/* Hero */}
+        <section className="relative py-14 sm:py-20 text-center overflow-hidden">
+          <div className="hero-glow" aria-hidden="true" />
+
+          <div className="relative z-10 flex flex-col items-center gap-4">
+            <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight leading-none">
+              U<span className="text-primary relative title-accent-line">Mart</span>
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
-              Find quality items at great prices from verified sellers
+            <p className="text-muted-foreground text-base sm:text-lg max-w-sm">
+              Quality items · Verified sellers · Great prices
             </p>
+            <div className="w-full max-w-2xl mt-2">
+              <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+            </div>
           </div>
+        </section>
 
-          {/* Search Bar */}
-          <SearchBar onSearch={handleSearch} isLoading={isLoading} />
-        </div>
-
-        {/* Products */}
-        <ProductCards
-          products={products}
-          isLoading={isLoading}
-          hasSearched={hasSearched}
-        />
-      </div>
+        {/* Content */}
+        <section>
+          {hasSearched ? (
+            <ProductCards products={products} isLoading={isLoading} hasSearched={hasSearched} />
+          ) : (
+            <ProductList />
+          )}
+        </section>
+      </main>
     </div>
   )
 }

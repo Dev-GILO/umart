@@ -28,9 +28,18 @@ interface PaystackConfig {
   email: string;
   amount: number;
   ref: string;
+  currency?: string;
+  metadata?: {
+    custom_fields?: Array<{
+      display_name: string;
+      variable_name: string;
+      value: string;
+    }>;
+    [key: string]: unknown;
+  };
   onClose: () => void;
-  onSuccess: (response: PaystackResponse) => void;
+  onSuccess?: (response: PaystackResponse) => void; // kept for backwards compat
+  callback?: (response: PaystackResponse) => void;  // Paystack inline v1 name
 }
 
 export {};
-    

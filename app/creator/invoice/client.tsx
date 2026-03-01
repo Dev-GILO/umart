@@ -30,6 +30,7 @@ export function CreatorInvoiceClient() {
   const [customer, setCustomer] = useState<CustomerData | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
   const [shippingFee, setShippingFee] = useState(0)
+  const [buyerBearsBurden, setBuyerBearsBurden] = useState(true) // buyer pays fee by default
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -43,16 +44,15 @@ export function CreatorInvoiceClient() {
       setLoading(true)
       setError('')
 
-      // Get current user and fresh token
       const user = auth.currentUser
-      
+
       if (!user) {
         setError('Please log in to create an invoice')
         router.push('/auth/login')
         return
       }
 
-      const token = await user.getIdToken(true) // Force refresh
+      const token = await user.getIdToken(true)
 
       const response = await fetch('/api/payment/create', {
         method: 'POST',
@@ -72,6 +72,7 @@ export function CreatorInvoiceClient() {
             price: item.price,
           })),
           shippingFee,
+          buyerBearsBurden, // backend will verify and recalculate independently
         }),
       })
 
@@ -82,7 +83,6 @@ export function CreatorInvoiceClient() {
         return
       }
 
-      // Redirect to success page
       router.push(
         `/creator/invoice/success?refId=${result.data.refId}&grandPrice=${result.data.grandPrice}`
       )
@@ -123,6 +123,9 @@ export function CreatorInvoiceClient() {
               items={items}
               shippingFee={shippingFee}
               onShippingFeeChange={setShippingFee}
+              buyerBearsBurden={buyerBearsBurden}
+              onBurdenChange={setBuyerBearsBurden}
+              buyerName={customer?.fullname ?? null}
             />
           </div>
 
