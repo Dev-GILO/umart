@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase-admin'
 
+type TransactionType = 'purchase' | 'sale'
+
+interface TransactionRef {
+  refId: string
+  type: TransactionType
+}
+
 export async function GET(req: NextRequest) {
   try {
+    // ── Auth ──────────────────────────────────────────────────────────────────
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -16,75 +24,131 @@ export async function GET(req: NextRequest) {
 
     try {
       decodedToken = await adminAuth.verifyIdToken(token)
-    } catch (error: any) {
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 401 }
       )
     }
 
+    const userId = decodedToken.uid
     const { searchParams } = new URL(req.url)
-    const refId = searchParams.get('id')
+    const type = searchParams.get('type') as TransactionType | null
+    const refId = searchParams.get('refId')
 
-    if (!refId) {
+    if (!type || (type !== 'purchase' && type !== 'sale')) {
       return NextResponse.json(
-        { success: false, error: 'Missing transaction ID' },
+        { success: false, error: "Missing or invalid type. Must be 'purchase' or 'sale'" },
         { status: 400 }
       )
     }
 
-    // Fetch transaction details from references collection
-    const refDoc = await adminDb.collection('references').doc(refId).get()
+    // ── Single transaction lookup: ?type=purchase&refId=xxx ──────────────────
+    if (refId) {
+      const refDoc = await adminDb.collection('references').doc(refId).get()
 
-    if (!refDoc.exists) {
+      if (!refDoc.exists) {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+
+      const d = refDoc.data()!
+
+      // Access control: verify user is the correct party for the requested type
+      if (type === 'purchase' && d.buyerId !== userId) {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+      if (type === 'sale' && d.sellerId !== userId) {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+
       return NextResponse.json(
-        { success: false, error: 'Transaction not found' },
+        {
+          success: true,
+          data: {
+            refId: d.refId,
+            type,
+            buyerId: d.buyerId,
+            sellerId: d.sellerId,
+            buyerName: d.buyerName ?? null,
+            buyerEmail: d.buyerEmail ?? null,
+            buyerPhone: d.buyerPhone ?? null,
+            items: d.items ?? [],
+            itemsTotal: d.itemsTotal ?? 0,
+            shippingFee: d.shippingFee ?? 0,
+            platformFee: d.platformFee ?? 0,
+            grandPrice: d.grandPrice ?? 0,
+            status: d.status ?? null,
+            valueReceived: d.valueReceived ?? false,
+            withdrawn: d.withdrawn ?? false,
+            createdAt: d.createdAt,
+            updatedAt: d.updatedAt,
+          },
+        },
+        { status: 200 }
+      )
+    }
+
+    // ── All transactions for user: ?type=purchase ─────────────────────────────
+    const userDoc = await adminDb.collection('users').doc(userId).get()
+
+    if (!userDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
         { status: 404 }
       )
     }
 
-    const refData = refDoc.data()
+    const userData = userDoc.data()!
+    const allRefs: TransactionRef[] = userData.transactionRefs || []
 
-    // Verify user has access to this transaction
-    const userId = decodedToken.uid
-    if (refData?.buyerId !== userId && refData?.sellerId !== userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized access to this transaction' },
-        { status: 403 }
-      )
+    const filteredRefIds = allRefs
+      .filter((ref) => ref.type === type)
+      .map((ref) => ref.refId)
+
+    if (filteredRefIds.length === 0) {
+      return NextResponse.json({ success: true, data: [] }, { status: 200 })
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          refId: refData?.refId,
-          sellerId: refData?.sellerId,
-          buyerId: refData?.buyerId,
-          buyerName: refData?.buyerName,
-          buyerEmail: refData?.buyerEmail,
-          buyerPhone: refData?.buyerPhone,
-          items: refData?.items || [],
-          itemsTotal: refData?.itemsTotal || 0,
-          shippingFee: refData?.shippingFee || 0,
-          platformFee: refData?.platformFee || 0,
-          grandPrice: refData?.grandPrice || 0,
-          status: refData?.status,
-          valueReceived: refData?.valueReceived,
-          withdrawn: refData?.withdrawn,
-          createdAt: refData?.createdAt,
-          updatedAt: refData?.updatedAt,
-        },
-      },
-      { status: 200 }
+    const refDocs = await Promise.all(
+      filteredRefIds.map((id) => adminDb.collection('references').doc(id).get())
     )
+
+    const transactions = refDocs
+      .filter((doc) => doc.exists)
+      .map((doc) => {
+        const d = doc.data()!
+        if (type === 'sale' && d.sellerId !== userId) return null
+        if (type === 'purchase' && d.buyerId !== userId) return null
+        return {
+          refId: d.refId,
+          type,
+          buyerName: d.buyerName ?? null,
+          buyerEmail: d.buyerEmail ?? null,
+          buyerPhone: d.buyerPhone ?? null,
+          items: d.items ?? [],
+          grandPrice: d.grandPrice ?? 0,
+          buyerBearsBurden: d.buyerBearsBurden ?? true,
+          status: d.status ?? null,
+          valueReceived: d.valueReceived ?? false,
+          withdrawn: d.withdrawn ?? false,
+        }
+      })
+      .filter(Boolean)
+
+    return NextResponse.json({ success: true, data: transactions }, { status: 200 })
   } catch (error: any) {
-    console.error('Error fetching transaction:', error)
+    console.error('Error fetching transactions:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to fetch transaction',
-      },
+      { success: false, error: error.message || 'Failed to fetch transactions' },
       { status: 500 }
     )
   }

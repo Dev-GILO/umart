@@ -3,11 +3,16 @@
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { Moon, Sun, Home, Grid, MessageCircle, User, History, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export function BuyerNav() {
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const toggleMenu = () => setIsOpen(!isOpen)
 
@@ -16,7 +21,7 @@ export function BuyerNav() {
     { label: 'Categories', href: '/categories', icon: Grid },
     { label: 'Chat', href: '/chat', icon: MessageCircle },
     { label: 'Profile', href: '/profile', icon: User },
-    { label: 'History', href: '/history', icon: History },
+    { label: 'History', href: '/transactions', icon: History },
   ]
 
   return (
@@ -55,10 +60,15 @@ export function BuyerNav() {
               className="p-2 rounded-lg hover:bg-muted transition-colors"
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5" />
+              {/* Blank placeholder during SSR to prevent hydration mismatch */}
+              {mounted ? (
+                theme === 'dark' ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )
               ) : (
-                <Moon className="w-5 h-5" />
+                <span className="w-5 h-5 block" />
               )}
             </button>
 

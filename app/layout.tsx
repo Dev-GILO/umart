@@ -10,7 +10,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'uHomes Mart',
+  title: 'U Mart',
   description: 'A marketplace for students and communities',
   icons: {
     icon: [

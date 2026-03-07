@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
     const categories = categoriesSnapshot.docs.map((doc) => ({
       id: doc.id,
+      name: doc.id, // document ID is the category name
       ...doc.data(),
     }))
 

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
+
+const PLATFORM_FEE_PERCENTAGE = 0.05
+const PLATFORM_FEE_BASE = 300
 
 interface InvoiceItem {
   productId: string
@@ -11,6 +14,7 @@ interface InvoiceItem {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Auth ──────────────────────────────────────────────────────────────────
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     try {
       decodedToken = await adminAuth.verifyIdToken(token)
-    } catch (error: any) {
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 401 }
@@ -32,119 +36,182 @@ export async function POST(req: NextRequest) {
     }
 
     const sellerId = decodedToken.uid
-    const {
-      buyerEmail,
-      buyerPhone,
-      buyerName,
-      buyerId,
-      items,
-      shippingFee,
-    } = await req.json()
 
-    // Validate required fields
-    if (!buyerId || !items || items.length === 0 || shippingFee === undefined) {
+    // ── Input validation ──────────────────────────────────────────────────────
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Invalid JSON body' },
         { status: 400 }
       )
     }
 
-    // Calculate totals
-    const itemsTotal = items.reduce(
-      (sum: number, item: InvoiceItem) => sum + item.price * item.quantity,
+    const { buyerId, buyerName, buyerEmail, buyerPhone, items, shippingFee, buyerBearsBurden } =
+      body as Record<string, unknown>
+
+    if (!buyerId || typeof buyerId !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Missing or invalid buyerId' },
+        { status: 400 }
+      )
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'At least one item is required' },
+        { status: 400 }
+      )
+    }
+
+    for (const item of items as InvoiceItem[]) {
+      if (!item.productId || !item.productName || !item.quantity || item.price == null) {
+        return NextResponse.json(
+          { success: false, error: 'Each item must have productId, productName, quantity, and price' },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (buyerId === sellerId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot create an invoice for yourself' },
+        { status: 403 }
+      )
+    }
+
+    // ── Backend recalculates everything cos I never trust the frontend ────────────
+    const invoiceItems = items as InvoiceItem[]
+
+    const itemsTotal: number = invoiceItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
       0
     )
-    const platformFee = itemsTotal * 0.05 + 100
-    const grandPrice = itemsTotal + shippingFee + platformFee
 
-    // Generate reference ID
+    const resolvedShippingFee: number =
+      typeof shippingFee === 'number' && shippingFee >= 0 ? shippingFee : 0
+
+    // Backend independently determines buyerBearsBurden — default true if not a boolean
+    const resolvedBuyerBearsBurden: boolean =
+      typeof buyerBearsBurden === 'boolean' ? buyerBearsBurden : true
+
+    const platformFee: number =
+      Math.round((itemsTotal * PLATFORM_FEE_PERCENTAGE + PLATFORM_FEE_BASE) * 100) / 100
+
+    // grandPrice = what the buyer actually pays
+    const grandPrice: number = resolvedBuyerBearsBurden
+      ? itemsTotal + resolvedShippingFee + platformFee  // buyer pays fee on top
+      : itemsTotal + resolvedShippingFee                 // buyer pays clean amount
+
+    // sellerPayout = what the seller receives after platform takes its cut
+    const sellerPayout: number = resolvedBuyerBearsBurden
+      ? itemsTotal + resolvedShippingFee                 // fee already covered by buyer
+      : itemsTotal + resolvedShippingFee - platformFee   // fee deducted from seller's cut
+
+    // ── Generate refId ────────────────────────────────────────────────────────
     const timestamp = Date.now()
-    const refId = `umart-ref-${timestamp}`
+    const refId = `umart-${timestamp}`
+    const refDocRef = adminDb.collection('references').doc(refId)
+    const now = Timestamp.now()
 
-    // Create reference document in Firestore
-    const referenceData = {
+    const transactionData = {
       refId,
-      sellerId,
       buyerId,
-      buyerEmail,
-      buyerPhone,
-      buyerName,
-      items,
+      sellerId,
+      buyerName: buyerName || null,
+      buyerEmail: buyerEmail || null,
+      buyerPhone: buyerPhone || null,
+      items: invoiceItems.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+      })),
       itemsTotal,
-      shippingFee,
+      shippingFee: resolvedShippingFee,
       platformFee,
       grandPrice,
+      sellerPayout,                          // pre-calculated for withdrawal
+      buyerBearsBurden: resolvedBuyerBearsBurden,
       status: 'pending',
       valueReceived: false,
       withdrawn: false,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+      createdAt: now,
+      updatedAt: now,
     }
 
-    await adminDb.collection('references').doc(refId).set(referenceData)
-
-    // Create transaction subcollection atomically
+    // ── Atomic batch write ────────────────────────────────────────────────────
     const batch = adminDb.batch()
 
-    // Add to seller's transactions
-    const sellerTransactionRef = adminDb
-      .collection('users')
-      .doc(sellerId)
-      .collection('transactions-sell')
-      .doc(refId)
+    // 1. Transaction document
+    batch.set(refDocRef, transactionData)
 
-    batch.set(sellerTransactionRef, {
-      refId,
-      type: 'sale',
-      buyerId,
-      buyerEmail,
-      buyerName,
-      items,
-      itemsTotal,
-      shippingFee,
-      platformFee,
-      grandPrice,
-      createdAt: new Date().toISOString(),
-    })
+    // 2. Buyer: append refId to their transaction history
+    const buyerUserRef = adminDb.collection('users').doc(buyerId)
+    batch.set(
+      buyerUserRef,
+      { transactionRefs: FieldValue.arrayUnion({ refId, type: 'purchase' }) },
+      { merge: true }
+    )
 
-    // Add to buyer's transactions
-    const buyerTransactionRef = adminDb
-      .collection('users')
-      .doc(buyerId)
-      .collection('transactions-buy')
-      .doc(refId)
-
-    batch.set(buyerTransactionRef, {
-      refId,
-      type: 'purchase',
-      sellerId,
-      items,
-      itemsTotal,
-      shippingFee,
-      platformFee,
-      grandPrice,
-      createdAt: new Date().toISOString(),
-    })
+    // 3. Seller: append refId + accumulate escrow totals on their user doc
+    const sellerUserRef = adminDb.collection('users').doc(sellerId)
+    batch.set(
+      sellerUserRef,
+      {
+        transactionRefs:     FieldValue.arrayUnion({ refId, type: 'sale' }),
+        pending:         FieldValue.increment(grandPrice),
+        pendingPayments: FieldValue.increment(1),
+      },
+      { merge: true }
+    )
 
     await batch.commit()
 
+    // ── Admin analytics — Nigerian timezone (WAT = UTC+1) ─────────────────────
+    // Separate try/catch: analytics failure must never roll back a committed invoice.
+    // createdAt is included on every merge write — because these docs are time-bucketed
+    // (one per day/month/year), the first write of each period sets it naturally.
+    // updatedAt is always refreshed on every invoice within the period.
+    try {
+      const nigerianTime = new Date(Date.now() + 60 * 60 * 1000)
+
+      const year  = nigerianTime.getUTCFullYear().toString()
+      const month = `${nigerianTime.getUTCFullYear()}-${String(nigerianTime.getUTCMonth() + 1).padStart(2, '0')}`
+      const day   = `${nigerianTime.getUTCFullYear()}-${String(nigerianTime.getUTCMonth() + 1).padStart(2, '0')}-${String(nigerianTime.getUTCDate()).padStart(2, '0')}`
+
+      const analyticsPayload = {
+        totalEscrow:         FieldValue.increment(grandPrice),
+        totalEscrowPayments: FieldValue.increment(1),
+        createdAt:           FieldValue.serverTimestamp(), // naturally set on first write per period
+        updatedAt:           FieldValue.serverTimestamp(), // refreshed on every write
+      }
+
+      const analyticsBatch = adminDb.batch()
+
+      const dailyRef   = adminDb.collection('admin').doc('analytics').collection('daily').doc(day)
+      const monthlyRef = adminDb.collection('admin').doc('analytics').collection('monthly').doc(month)
+      const yearlyRef  = adminDb.collection('admin').doc('analytics').collection('yearly').doc(year)
+
+      analyticsBatch.set(dailyRef,   analyticsPayload, { merge: true })
+      analyticsBatch.set(monthlyRef, analyticsPayload, { merge: true })
+      analyticsBatch.set(yearlyRef,  analyticsPayload, { merge: true })
+
+      await analyticsBatch.commit()
+      console.log('Invoice analytics updated:', { day, month, year, grandPrice })
+    } catch (analyticsError) {
+      console.error('Error updating invoice analytics:', analyticsError)
+    }
+
     return NextResponse.json(
-      {
-        success: true,
-        data: {
-          refId,
-          grandPrice,
-        },
-      },
+      { success: true, data: transactionData },
       { status: 201 }
     )
   } catch (error: any) {
-    console.error('Error creating payment:', error)
+    console.error('Error creating invoice:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to create payment',
-      },
+      { success: false, error: error.message || 'Failed to create invoice' },
       { status: 500 }
     )
   }
