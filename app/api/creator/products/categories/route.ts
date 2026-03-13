@@ -15,7 +15,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 // ─────────────────────────────────────────────────────────────────────────────
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('authorization')
@@ -47,7 +47,7 @@ export async function PATCH(
   }
 
   // ── 3. Resolve category doc ───────────────────────────────────────────────
-  const categoryId = params.id
+  const { id: categoryId } = await params
   const categoryRef = adminDb.collection('productCategories').doc(categoryId)
   const categorySnap = await categoryRef.get()
 
