@@ -11,12 +11,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 // Expected body (all optional, but at least one should be present):
 //   { displayName?, description?, imageUrl?, imagePublicId?, isActive? }
 //
-// Auth: Bearer token; caller must have roles.isAdmin === true in Firestore.
+// Auth: Bearer token; caller must have roles.isAdmin === true in db.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: NextRequest) {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -46,8 +43,14 @@ export async function PATCH(
     )
   }
 
-  // ── 3. Resolve category doc ───────────────────────────────────────────────
-  const { id: categoryId } = await params
+  // -- 3. Resolve category doc
+  const categoryId = req.nextUrl.searchParams.get('id')
+  if (!categoryId) {
+    return NextResponse.json(
+      { success: false, error: 'Missing required query param: id' },
+      { status: 400 }
+    )
+  }
   const categoryRef = adminDb.collection('productCategories').doc(categoryId)
   const categorySnap = await categoryRef.get()
 
