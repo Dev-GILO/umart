@@ -22,7 +22,7 @@ export function CreatorNav() {
     { label: 'Create Product', href: '/creator/product/create', icon: Plus },
     { label: 'My Products', href: '/creator/my-products', icon: Package },
     { label: 'Chats', href: '/creator/chats', icon: MessageCircle },
-    { label: 'Profile', href: '/creator/profile', icon: User },
+    { label: 'Profile', href: '/profile', icon: User },
     { label: 'Transactions', href: '/creator/transactions', icon: DollarSign },
   ]
 

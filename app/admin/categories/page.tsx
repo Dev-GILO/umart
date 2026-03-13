@@ -29,7 +29,7 @@ export default function AdminCategoriesPage() {
       setLoading(true)
       setError(null)
       try {
-        const res  = await fetch('/api/creator/products/categories')
+        const res  = await fetch('/api/creator/products/categories?count=true')
         const json = await res.json()
         if (json.success) {
           setCategories(

@@ -4,6 +4,63 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
+// ── GET /api/creator/products/categories ───────────────────────────────────────────
+// Public — returns all active product categories ordered by displayName.
+// No auth required so the category list can be shown on public-facing forms.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function GET(req: NextRequest) {
+  try {
+    const withCount = req.nextUrl.searchParams.get('count') === 'true'
+
+    const snap = await adminDb.collection('productCategories').get()
+
+    // Build base category objects from the category docs
+    const data = snap.docs.map((doc) => {
+      const d = doc.data()
+      return {
+        id:            doc.id,
+        name:          doc.id,                   // doc ID is the category slug/name
+        displayName:   d.displayName  ?? doc.id,
+        description:   d.description  ?? null,
+        imageUrl:      d.imageUrl     ?? null,
+        imagePublicId: d.imagePublicId ?? null,
+        isActive:      d.isActive     ?? true,
+        productCount:  0,                        // filled in below when ?count=true
+        createdAt:     d.createdAt    ?? null,
+        updatedAt:     d.updatedAt    ?? null,
+      }
+    })
+
+    // ── Optional product count ────────────────────────────────────────────────
+    // Uses Firestore aggregation count() — costs 1 read per category, 0 doc reads.
+    // All counts run in parallel so total latency ~ slowest single category.
+    if (withCount) {
+      await Promise.all(
+        data.map(async (cat) => {
+          const countSnap = await adminDb
+            .collection('productCategories')
+            .doc(cat.id)
+            .collection('products')
+            .count()
+            .get()
+          cat.productCount = countSnap.data().count
+        })
+      )
+    }
+
+    // Sort alphabetically by displayName
+    data.sort((a, b) => a.displayName.localeCompare(b.displayName))
+
+    return NextResponse.json({ success: true, data }, { status: 200 })
+  } catch (error: any) {
+    console.error('[GET /categories] Error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch categories' },
+      { status: 500 }
+    )
+  }
+}
+
 // ── PATCH /api/creator/products/categories/[id] ───────────────────────────────
 // Admin-only — updates an existing category's editable fields.
 // The slug (doc ID) is immutable and never changed here.

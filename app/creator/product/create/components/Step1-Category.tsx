@@ -55,7 +55,7 @@ const MODEL_WORDS = [
 ]
 
 export function Step1Category({ data, onChange, onNext }: Step1Props) {
-  const [categories, setCategories] = useState<any[]>([])
+  const [categories, setCategories] = useState<{ id: string; name: string; displayName: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [currentBrand, setCurrentBrand] = useState(0)
   const [currentModel, setCurrentModel] = useState(0)
@@ -94,9 +94,7 @@ export function Step1Category({ data, onChange, onNext }: Step1Props) {
   }
 
   const handleCategoryChange = (categoryId: string) => {
-    const category = categories.find((c) => c.id === categoryId)
-    const isPhone = categoryId === 'phones'
-    setIsPhoneCategory(isPhone)
+    setIsPhoneCategory(categoryId === 'phones')
     onChange({ ...data, category: categoryId })
   }
 
@@ -129,7 +127,7 @@ export function Step1Category({ data, onChange, onNext }: Step1Props) {
               <option value="">Select a category...</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
-                  {cat.name || cat.id}
+                  {cat.displayName || cat.name || cat.id}
                 </option>
               ))}
             </select>
