@@ -74,6 +74,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Payment ban check ────────────────────────────────────────────────────
+    const sellerDoc = await adminDb.collection('users').doc(sellerId).get()
+    if (sellerDoc.exists && sellerDoc.data()?.restrictions?.isPaymentBanned === true) {
+      return NextResponse.json(
+        { success: false, error: 'This account cannot create payments. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     if (buyerId === sellerId) {
       return NextResponse.json(
         { success: false, error: 'You cannot create an invoice for yourself' },

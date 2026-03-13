@@ -25,6 +25,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // ── Block flagged products ─────────────────────────────────────────────────
+    if (productId) {
+      const productDoc = await adminDb.collection('products').doc(productId).get()
+      if (productDoc.exists && productDoc.data()?.flagged === true) {
+        return NextResponse.json(
+          { success: false, error: 'This listing has been flagged by the platform and is currently unavailable.' },
+          { status: 403 }
+        )
+      }
+    }
+
     // Check if chat already exists
     const existingChat = await adminDb
       .collection('chats')

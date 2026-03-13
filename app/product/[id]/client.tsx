@@ -46,6 +46,7 @@ export function ProductDetailClient({ product }: Props) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [reportOpen, setReportOpen]               = useState(false)
   const [contactingLoading, setContactingLoading] = useState(false)
+  const [contactError,      setContactError]      = useState<string | null>(null)
 
   // ── Guard: ensures auto-contact fires at most once per page load ──────────
   // useRef so it survives re-renders without triggering effects, and isn't
@@ -62,6 +63,7 @@ export function ProductDetailClient({ product }: Props) {
     }
     try {
       setContactingLoading(true)
+      setContactError(null)
       const token = await user.getIdToken()
       const res = await fetch('/api/chat/create', {
         method: 'POST',
@@ -77,10 +79,10 @@ export function ProductDetailClient({ product }: Props) {
       if (result.success) {
         router.push('/chat')
       } else {
-        alert('Failed to create chat. Please try again.')
+        setContactError(result.error ?? 'Failed to create chat. Please try again.')
       }
     } catch {
-      alert('Error creating chat. Please try again.')
+      setContactError('Error creating chat. Please try again.')
     } finally {
       setContactingLoading(false)
     }
@@ -190,6 +192,7 @@ export function ProductDetailClient({ product }: Props) {
               onReport={() => setReportOpen(true)}
               contactingLoading={contactingLoading}
               isOwner={authReady && currentUser?.uid === product.userId}
+              contactError={contactError}
             />
           </div>
         </div>

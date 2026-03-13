@@ -16,14 +16,16 @@ import {
   ShieldCheck,
   X,
   Menu,
+  LayoutList,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard',  href: '/admin',             icon: LayoutDashboard },
-  { label: 'References', href: '/admin/references',  icon: FileText        },
-  { label: 'Inventory',  href: '/admin/inventory',   icon: Package         },
-  { label: 'Categories', href: '/admin/categories',  icon: Tag             },
-  { label: 'Users',      href: '/admin/users',       icon: Users           },
+  { label: 'Dashboard',  href: '/admin',             icon: LayoutDashboard, exact: true  },
+  { label: 'References', href: '/admin/references',  icon: FileText,        exact: false },
+  { label: 'Pay Queue', href: '/admin/pay-queue',    icon: LayoutList,      exact: false },
+  { label: 'Inventory',  href: '/admin/inventory',   icon: Package,         exact: false },
+  { label: 'Categories', href: '/admin/categories',  icon: Tag,             exact: false },
+  { label: 'Users',      href: '/admin/users',       icon: Users,           exact: false },
 ]
 
 export function AdminNav() {
@@ -39,10 +41,22 @@ export function AdminNav() {
     return () => { document.body.style.overflow = '' }
   }, [mobileOpen])
 
+  /**
+   * FIX: Previously we used `pathname.startsWith(href + '/')` for ALL items,
+   * which caused /admin to remain active when navigating to any route 😂😂.
+   * Now each item has an `exact` flag:
+   *   - exact: true  → only active when pathname === href
+   *   - exact: false → active when pathname === href OR starts with href + '/'
+   */
+  const isActive = (href: string, exact: boolean) => {
+    if (exact) return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
+  }
+
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
-      {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(href + '/')
+      {NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
+        const active = isActive(href, exact)
         return (
           <Link
             key={href}

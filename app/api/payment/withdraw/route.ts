@@ -29,6 +29,15 @@ export async function GET(req: NextRequest) {
 
     const data = doc.data()!
 
+    // ── Fetch reference to check flagged status ───────────────────────────────
+    const refDocForFlag = await adminDb.collection('references').doc(refId).get()
+    if (refDocForFlag.exists && refDocForFlag.data()?.flagged) {
+      return NextResponse.json(
+        { success: false, error: 'This transaction has been flagged and cannot be processed' },
+        { status: 403 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -131,6 +140,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Funds have already been withdrawn for this transaction' },
         { status: 400 }
+      )
+    }
+
+    // ── Block flagged transactions ─────────────────────────────────────────────
+    if (refData.flagged) {
+      return NextResponse.json(
+        { success: false, error: 'This transaction has been flagged and cannot be processed' },
+        { status: 403 }
       )
     }
 
