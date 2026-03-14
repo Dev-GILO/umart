@@ -55,30 +55,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const sellerId: string   = refData.sellerId
-    const grandPrice: number = refData.grandPrice ?? amountPaid
-    const itemsTotal: number = refData.itemsTotal ?? 0
+    const sellerId: string    = refData.sellerId
+    const grandPrice: number  = refData.grandPrice ?? amountPaid
+    const itemsTotal: number  = refData.itemsTotal ?? 0
+    const sellerPayout: number = refData.sellerPayout ?? grandPrice  // what seller actually receives
     const now = Timestamp.now()
 
     const platformFee: number = parseFloat(((grandPrice * 0.05) + 300).toFixed(2))
 
     const batch = adminDb.batch()
 
+    // ── Mark transaction as paid ──────────────────────────────────────────────
     batch.update(adminDb.collection('references').doc(refId), {
       status: 'paid',
       updatedAt: now,
     })
 
+    // ── Seller: credit sellerPayout to escrow balance, decrement pending ──────
     const sellerRef = adminDb.collection('users').doc(sellerId)
     batch.set(
       sellerRef,
       {
-        totalEscrowPaid:      FieldValue.increment(grandPrice),
+        totalEscrowPaid:      FieldValue.increment(sellerPayout),  // seller's net receivable
         totalEscrowPaidCount: FieldValue.increment(1),
+        pending:              FieldValue.increment(-grandPrice),    // reverse the invoice's escrow hold
+        pendingPayments:      FieldValue.increment(-1),            // one fewer outstanding invoice
       },
       { merge: true }
     )
 
+    // ── Escrow transaction log ────────────────────────────────────────────────
     const escrowTxRef = adminDb
       .collection('admin')
       .doc('escrow')
@@ -88,13 +94,15 @@ export async function POST(req: NextRequest) {
     batch.set(escrowTxRef, {
       refId,
       sellerId,
-      buyerId:     refData.buyerId,
-      itemAmount:  itemsTotal,
+      buyerId:      refData.buyerId,
+      itemAmount:   itemsTotal,
       platformFee,
       grandPrice,
+      sellerPayout,
       paidAt: now,
     })
 
+    // ── Global admin totals ───────────────────────────────────────────────────
     const globalRef = adminDb.collection('admin').doc('global')
     batch.set(
       globalRef,
@@ -107,6 +115,7 @@ export async function POST(req: NextRequest) {
       { merge: true }
     )
 
+    // ── Time-series analytics ─────────────────────────────────────────────────
     const nigerianTime = new Date(Date.now() + 60 * 60 * 1000)
     const year  = nigerianTime.getUTCFullYear().toString()
     const month = `${nigerianTime.getUTCFullYear()}-${String(nigerianTime.getUTCMonth() + 1).padStart(2, '0')}`
@@ -130,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     await batch.commit()
 
-    console.log(`[webhook] Processed charge.success — refId: ${refId}, grandPrice: ₦${grandPrice}, platformFee: ₦${platformFee}`)
+    console.log(`[webhook] Processed charge.success — refId: ${refId}, grandPrice: ₦${grandPrice}, sellerPayout: ₦${sellerPayout}, platformFee: ₦${platformFee}`)
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (error: any) {
     console.error('[webhook] Error processing Paystack event:', error)

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
-import { Moon, Sun, LayoutDashboard, Plus, Package, MessageCircle, User, DollarSign, Menu, X } from 'lucide-react'
+import { Moon, Sun, LayoutDashboard, Plus, Package, MessageCircle, User, DollarSign, BadgeDollarSign, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 export function CreatorNav() {
@@ -22,7 +22,7 @@ export function CreatorNav() {
     { label: 'Create Product', href: '/creator/product/create', icon: Plus },
     { label: 'My Products', href: '/creator/my-products', icon: Package },
     { label: 'Chats', href: '/creator/chats', icon: MessageCircle },
-    { label: 'Profile', href: '/profile', icon: User },
+    { label: 'Invoice', href: '/creator/invoice', icon: BadgeDollarSign },
     { label: 'Transactions', href: '/creator/transactions', icon: DollarSign },
   ]
 

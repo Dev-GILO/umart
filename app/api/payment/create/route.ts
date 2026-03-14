@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
       sellerUserRef,
       {
         transactionRefs:     FieldValue.arrayUnion({ refId, type: 'sale' }),
-        pending:         FieldValue.increment(grandPrice),
+        pending:         FieldValue.increment(sellerPayout), // amount currently in limbo until payment confirmed
         pendingPayments: FieldValue.increment(1),
       },
       { merge: true }
@@ -178,11 +178,6 @@ export async function POST(req: NextRequest) {
 
     await batch.commit()
 
-    // ── Admin analytics — Nigerian timezone (WAT = UTC+1) ─────────────────────
-    // Separate try/catch: analytics failure must never roll back a committed invoice.
-    // createdAt is included on every merge write — because these docs are time-bucketed
-    // (one per day/month/year), the first write of each period sets it naturally.
-    // updatedAt is always refreshed on every invoice within the period.
     try {
       const nigerianTime = new Date(Date.now() + 60 * 60 * 1000)
 
